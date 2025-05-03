@@ -163,6 +163,21 @@ def update_user_lang(user_id, lang_code):
     conn.close()
 
 def add_or_update_user(user_id, username, first_name, last_name):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('SELECT 1 FROM users WHERE user_id = ?', (user_id,))
+    if cursor.fetchone():
+        cursor.execute('''
+            UPDATE users SET username=?, first_name=?, last_name=? WHERE user_id=?
+        ''', (username, first_name, last_name, user_id))
+    else:
+        cursor.execute('''
+            INSERT INTO users (user_id, username, first_name, last_name)
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, username, first_name, last_name))
+    conn.commit()
+    conn.close()
+    return
     """Adds a new user or updates existing user's info, keeping language and banned status."""
     conn = db_connect()
     cursor = conn.cursor()
@@ -276,7 +291,7 @@ async def start_handler(event):
 
     add_or_update_user(user_id, username, first_name, last_name)
 
-    if await is_user_banned(user_id):
+    if is_user_banned(user_id):
         await event.reply(get_string(user_id, "banned_message"))
         return
 
@@ -293,7 +308,7 @@ async def main_menu_handler(event):
     user_id = sender.id
     text = event.raw_text
 
-    if await is_user_banned(user_id):
+    if is_user_banned(user_id):
         # Don't reply to banned users unless it's an unban command from admin
         command_part = text.split(" ")[0]
         if not (await is_admin(user_id) and command_part in ['/unban']):
@@ -373,7 +388,7 @@ async def handle_prompt(event):
     # --- User Checks ---
     add_or_update_user(user_id, sender.username, sender.first_name, sender.last_name) # Ensure user exists
 
-    if await is_user_banned(user_id):
+    if is_user_banned(user_id):
         await event.reply(get_string(user_id, "banned_message"))
         return
 
@@ -396,8 +411,8 @@ async def handle_prompt(event):
 
 
         # Basic HTML validation (check for <!doctype html>)
-        if not html_code or not html_code.strip().lower().startswith("<!doctype html"):
-            logger.warning(f"Invalid HTML received for user {user_id}. Response: {html_code[:500]}") # Log part of the invalid response
+        if "<html" not in html_code.lower():
+            logger.warning(f"Invalid HTML received for user {user_id}. Response: {html_code[:500]}")
             await msg.edit(get_string(user_id, "error_invalid_html"))
             return
 
